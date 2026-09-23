@@ -15,6 +15,22 @@ from .constants import (
 )
 
 
+def __getattr__(name: str) -> Any:
+    """Lazily expose the low-level RabbitMQ compatibility API."""
+    try:
+        from rabbitmq_amqp_python_client import __dict__ as rabbitmq_namespace
+
+        value = rabbitmq_namespace.get(name)
+        if value is None and name == "DirectReplyToConsumerOptions":
+            value = rabbitmq_namespace["ConsumerOptions"]
+        if value is None:
+            raise KeyError(name)
+    except (ImportError, KeyError) as exc:
+        raise AttributeError(name) from exc
+    globals()[name] = value
+    return value
+
+
 def _engine_class(provider: str) -> Type[QueueEngine]:
     if provider == PROVIDER_AWS:
         from .providers.aws import AwsEngine

@@ -24,6 +24,14 @@ from .constants import (
 )
 
 
+def __getattr__(name: str) -> Any:
+    if name == "Converter":
+        from rabbitmq_amqp_python_client.utils import Converter
+
+        return Converter
+    raise AttributeError(name)
+
+
 def encode_body(body: Any) -> bytes:
     if isinstance(body, bytes):
         return body

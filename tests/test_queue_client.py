@@ -1,4 +1,7 @@
-from weenspace_queue import QueueClient
+from types import SimpleNamespace
+
+from weenspace_queue import Message, QueueClient
+from weenspace_queue.providers.aws import AwsEngine
 from weenspace_queue.utils import (
     inject_aws_routing_attrs,
     rabbitmq_exchange_address,
@@ -75,3 +78,41 @@ def test_queue_client_rejects_unknown_provider() -> None:
         assert "Unsupported provider" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_aws_sns_publish_uses_topic_arn() -> None:
+    engine = AwsEngine.__new__(AwsEngine)
+    engine.sns = SimpleNamespace(publish=lambda **kwargs: kwargs)
+
+    result = engine.publish(
+        "arn:aws:sns:us-east-1:123456789012:click-events",
+        Message(body=b"click", routing_key="user.click.cart"),
+    )
+
+    assert result["TopicArn"].endswith(":click-events")
+    assert result["MessageAttributes"]["routing_key"]["StringValue"] == (
+        "user.click.cart"
+    )
+
+
+def test_aws_sns_subscription_uses_topic_arn() -> None:
+    calls = []
+    engine = AwsEngine.__new__(AwsEngine)
+    engine.sns = SimpleNamespace(
+        subscribe=lambda **kwargs: calls.append(("subscribe", kwargs))
+    )
+    engine.sqs = SimpleNamespace(
+        get_queue_attributes=lambda **kwargs: {
+            "Attributes": {"QueueArn": "arn:aws:sqs:us-east-1:123:events"}
+        },
+        set_queue_attributes=lambda **kwargs: calls.append(("policy", kwargs)),
+    )
+
+    engine.bind_pattern(
+        "https://sqs.us-east-1.amazonaws.com/123/events",
+        "arn:aws:sns:us-east-1:123:click-events",
+        "user.click.*",
+    )
+
+    assert calls[0][1]["TopicArn"].endswith(":click-events")
+    assert calls[0][1]["Attributes"]["FilterPolicyScope"] == "MessageAttributes"

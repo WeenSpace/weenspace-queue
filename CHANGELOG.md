@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-09-23
+
+### Fixed
+- Updated RabbitMQ client compatibility for the latest upstream release.
+- Made RabbitMQ and AWS provider imports lazy.
+- Fixed provider-neutral SNS/SQS example identifiers and added SNS coverage.
+- Restored low-level RabbitMQ compatibility exports.
+
 ## [0.1.0] - 2026-08-25
 
 ### Added

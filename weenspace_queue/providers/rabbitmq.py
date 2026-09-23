@@ -30,10 +30,10 @@ from weenspace_queue.utils import (
 )
 
 _EXCHANGE_KIND_MAP = {
-    ExchangeKind.DIRECT: ExchangeType.DIRECT,
-    ExchangeKind.TOPIC: ExchangeType.TOPIC,
-    ExchangeKind.FANOUT: ExchangeType.FANOUT,
-    ExchangeKind.HEADERS: ExchangeType.HEADERS,
+    ExchangeKind.DIRECT: ExchangeType.direct,
+    ExchangeKind.TOPIC: ExchangeType.topic,
+    ExchangeKind.FANOUT: ExchangeType.fanout,
+    ExchangeKind.HEADERS: ExchangeType.headers,
 }
 
 
