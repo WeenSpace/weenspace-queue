@@ -1,0 +1,1 @@
+"""Compatibility namespace for RabbitMQ's bundled Proton API."""
