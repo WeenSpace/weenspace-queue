@@ -25,86 +25,59 @@ pip install weenspace-queue
 
 ## 🚀 Quick Start
 
-### Basic Publisher/Consumer
+### Unified Publisher/Consumer
 
 ```python
-from weenspace_queue import (
-    Environment,
-    Connection,
-    Publisher,
-    Consumer,
-    Message,
-    ClassicQueueSpecification,
-    ExchangeSpecification,
-)
+from weenspace_queue import Message, QueueClient, QueueSpecification
 
-# Create environment and connection
-environment = Environment(uri="amqp://guest:guest@localhost:5672/")
-connection = environment.connection()
+client = QueueClient("rabbitmq", uri="amqp://guest:guest@localhost:5672/")
+queue = client.declare_queue(QueueSpecification(name="my-queue"))
+client.publish(queue, Message(body=b"Hello WeenSpace!"))
 
-# Declare queue with dead letter support
-management = connection.management()
-queue_spec = ClassicQueueSpecification(
-    name="my-queue",
-    is_durable=True,
-    dead_letter_exchange="dlx",
-    dead_letter_routing_key="dlx-key",
-    max_priority=10,  # Enable priority
-)
-management.declare_queue(queue_spec)
-
-# Publish message
-publisher = connection.publisher("/queues/my-queue")
-publisher.publish(Message(body=b"Hello WeenSpace!"))
-
-# Consume messages
-def on_message(message):
+def on_message(message: Message) -> None:
     print(f"Received: {message.body}")
     message.accept()
 
-consumer = connection.consumer("/queues/my-queue", handler=on_message)
+client.consume(queue, handler=on_message, prefetch=10)
 ```
+
+Install AWS support with `pip install "weenspace-queue[aws]"`.
 
 ### Async Support
 
 ```python
 import asyncio
-from weenspace_queue.asyncio import AsyncEnvironment
+from weenspace_queue import AsyncQueueClient, Message, QueueSpecification
 
 async def main():
-    async with AsyncEnvironment(uri="amqp://localhost:5672/") as env:
-        async with env.connection() as conn:
-            publisher = await conn.publisher("/queues/my-queue")
-            await publisher.publish(Message(body=b"Async message!"))
+    async with AsyncQueueClient("rabbitmq", uri="amqp://localhost:5672/") as client:
+        queue = await client.declare_queue(QueueSpecification(name="my-queue"))
+        await client.publish(queue, Message(body=b"Async message!"))
 
 asyncio.run(main())
 ```
 
-### OAuth2 Authentication
+### RabbitMQ authentication
 
 ```python
-from weenspace_queue import Environment, OAuth2Options
+from weenspace_queue import QueueClient
 
-oauth = OAuth2Options(token="your_jwt_token")
-environment = Environment(
+client = QueueClient(
+    "rabbitmq",
     uri="amqp://localhost:5672/",
-    oauth2_options=oauth
+    oauth2_options=your_oauth_options
 )
 ```
 
 ### TLS/SSL Connection
 
 ```python
-from weenspace_queue import Environment, SslConfiguration
+from weenspace_queue import QueueClient
 
-ssl_config = SslConfiguration(
-    ca_cert="/path/to/ca.pem",
-    client_cert="/path/to/client.pem",
-    client_key="/path/to/client.key"
-)
-environment = Environment(
+client = QueueClient(
+    "rabbitmq",
     uri="amqps://localhost:5671/",
-    ssl_configuration=ssl_config
+    ssl_context=your_ssl_context
 )
 ```
 
@@ -119,7 +92,7 @@ See [examples](./examples) folder for more detailed usage examples.
 # from python_rabbitmq import RabbitMQ
 
 # New (weenspace-queue)
-from weenspace_queue import Environment, Connection
+from weenspace_queue import QueueClient
 ```
 
 ## 📋 Requirements

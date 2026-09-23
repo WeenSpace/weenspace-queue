@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "weenspace-queue"
-version = "0.1.0"
+version = "0.1.1"
 description = "WeenSpace queue client for RabbitMQ and AWS SQS, supporting both synchronous and asynchronous operations."
 authors = ["WeenSpace <weenspace@gmail.com>"]
 license = "MIT"
@@ -22,28 +22,29 @@ packages = [{include = "weenspace_queue"}]
 [tool.poetry.dependencies]
 python = "^3.14"
 python-qpid-proton = "^0.40.0"
-typing-extensions = "^4.15.0"
-packaging = "^25.0"
+rabbitmq-amqp-python-client = "^1.0.1"
+boto3 = { version = "^1.43.100", optional = true }
+typing-extensions = "^4.16.0"
+packaging = "^26.3"
+
+[tool.poetry.extras]
+aws = ["boto3"]
 
 [tool.poetry.group.dev.dependencies]
-pyjwt = "^2.13.0"
+boto3 = "^1.43.100"
+pyjwt = "^2.14.0"
 pika = "^1.4.4"
-flake8 = "^7.3.0"
-isort = "^6.0.0"
-mypy = "^1.19.0"
-pytest = "^9.0.0"
+flake8 = "^7.4.1"
+isort = "^9.0.1"
+mypy = "^2.3.1"
+pytest = "^9.1.1"
 black = "^26.5.1"
-requests = "^2.32.0"
-pytest-asyncio = "^1.3.0"
+requests = "^2.34.2"
+pytest-asyncio = "^1.4.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.5.0"]
 build-backend = "poetry.core.masonry.api"
-
-[dependency-groups]
-dev = [
-    "boto3>=1.43.80",
-]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

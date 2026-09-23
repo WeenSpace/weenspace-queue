@@ -492,7 +492,7 @@ async def test_async_declare_quorum_queue_with_args(
         == queue_info.arguments["x-single-active-consumer"]
     )
 
-    assert queue_specification.deliver_limit == queue_info.arguments["x-deliver-limit"]
+    assert queue_specification.deliver_limit == queue_info.arguments["x-delivery-limit"]
     assert (
         queue_specification.dead_letter_strategy
         == queue_info.arguments["x-dead-letter-strategy"]

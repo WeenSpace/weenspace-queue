@@ -20,6 +20,7 @@ from weenspace_queue.constants import (
     SQS_FIFO_SUFFIX,
     SQS_POLICY_ATTRIBUTE,
     SQS_QUEUE_ARN_ATTRIBUTE,
+    SQS_ARN_MARKER,
     SQS_RECEIPT_HANDLE_ATTR,
     SQS_REDRIVE_POLICY_ATTRIBUTE,
     SQS_RETENTION_ATTRIBUTE,
@@ -118,7 +119,7 @@ class AwsEngine(QueueEngine):
         self.sns.subscribe(**subscribe_kwargs)
         self._allow_sns_to_sqs(queue_url, queue_arn, topic_id)
 
-    def publish(self, destination: str, message: Message) -> None:
+    def publish(self, destination: str, message: Message) -> Dict[str, Any]:
         body_str = decode_body(message.body)
         msg_attrs = dict(inject_aws_routing_attrs(message.routing_key))
         extra_attrs = message.attributes or {}
@@ -143,8 +144,7 @@ class AwsEngine(QueueEngine):
                 dedup = extra_attrs.get("message_deduplication_id")
                 if dedup:
                     publish_kwargs["MessageDeduplicationId"] = str(dedup)
-            self.sns.publish(**publish_kwargs)
-            return
+            return self.sns.publish(**publish_kwargs)
 
         queue_url = self._as_queue_url(destination)
         send_kwargs: Dict[str, Any] = {
@@ -160,15 +160,22 @@ class AwsEngine(QueueEngine):
             dedup = extra_attrs.get("message_deduplication_id")
             if dedup:
                 send_kwargs["MessageDeduplicationId"] = str(dedup)
-        self.sqs.send_message(**send_kwargs)
+        return self.sqs.send_message(**send_kwargs)
 
-    def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
+    def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: int | None = None,
+    ) -> None:
         queue_url = self._as_queue_url(queue_id)
         self._running = True
+        max_messages = self._max_messages if prefetch is None else max(1, min(prefetch, 10))
         while self._running:
             response = self.sqs.receive_message(
                 QueueUrl=queue_url,
-                MaxNumberOfMessages=self._max_messages,
+                MaxNumberOfMessages=max_messages,
                 WaitTimeSeconds=self._wait_time_seconds,
                 MessageAttributeNames=["All"],
                 AttributeNames=["All"],
@@ -203,6 +210,11 @@ class AwsEngine(QueueEngine):
                 QueueUrl=queue_url, ReceiptHandle=handle, VisibilityTimeout=0
             )
 
+        def modified(handle: str = receipt) -> None:
+            self.sqs.change_message_visibility(
+                QueueUrl=queue_url, ReceiptHandle=handle, VisibilityTimeout=0
+            )
+
         return Message(
             body=body,
             routing_key=routing_key,
@@ -210,6 +222,7 @@ class AwsEngine(QueueEngine):
             accept=accept,
             reject=reject,
             requeue=requeue,
+            modified=modified,
         )
 
     def _as_queue_url(self, queue_id: str) -> str:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from weenspace_queue import (
+from rabbitmq_amqp_python_client import (
     AMQPMessagingHandler,
     ClassicQueueSpecification,
     Environment,
@@ -14,7 +14,7 @@ from weenspace_queue import (
     QuorumQueueSpecification,
     StreamSpecification,
 )
-from weenspace_queue.delivery_context import DeliveryContext
+from rabbitmq_amqp_python_client.delivery_context import DeliveryContext
 
 from weenspace_queue.base import Message, QueueEngine, QueueSpecification, TopicSpecification
 from weenspace_queue.constants import (
@@ -64,6 +64,9 @@ class _CallbackHandler(AMQPMessagingHandler):
         def requeue(evt: Event = event) -> None:
             context.requeue(evt)
 
+        def modified(evt: Event = event) -> None:
+            context.discard_with_annotations(evt, {})
+
         self._handler(
             Message(
                 body=encode_body(proton_msg.body),
@@ -72,6 +75,7 @@ class _CallbackHandler(AMQPMessagingHandler):
                 accept=accept,
                 reject=reject,
                 requeue=requeue,
+                modified=modified,
             )
         )
 
@@ -90,7 +94,21 @@ class RabbitMqEngine(QueueEngine):
         self._conn = self._env.connection()
         self._conn.dial()
         self._mgmt = self._conn.management()
+        self._fix_quorum_delivery_limit()
         self._consumer: Optional[Any] = None
+        self._publishers: dict[str, Any] = {}
+
+    def _fix_quorum_delivery_limit(self) -> None:
+        declare_queue = self._mgmt._declare_queue
+
+        def declare_queue_with_rabbitmq_key(spec: Any) -> Any:
+            body = declare_queue(spec)
+            arguments = body.get("arguments", {})
+            if "x-deliver-limit" in arguments:
+                arguments["x-delivery-limit"] = arguments.pop("x-deliver-limit")
+            return body
+
+        self._mgmt._declare_queue = declare_queue_with_rabbitmq_key
 
     def declare_queue(self, spec: QueueSpecification) -> str:
         if spec.kind == QueueKind.STREAM:
@@ -156,35 +174,44 @@ class RabbitMqEngine(QueueEngine):
             )
         )
 
-    def publish(self, destination: str, message: Message) -> None:
+    def publish(self, destination: str, message: Message) -> Any:
         address = self._publish_address(destination, message.routing_key)
-        publisher = self._conn.publisher(address)
-        try:
-            proton_msg = ProtonMessage(body=encode_body(message.body))
-            proton_msg.inferred = True
-            if message.routing_key:
-                proton_msg.subject = message.routing_key
-            correlation_id = (message.attributes or {}).get("correlation_id")
-            if correlation_id is not None:
-                proton_msg.correlation_id = correlation_id
-            reply_to = (message.attributes or {}).get("reply_to")
-            if reply_to:
-                proton_msg.reply_to = reply_to
-            if message.attributes:
-                proton_msg.properties = {
-                    key: value
-                    for key, value in message.attributes.items()
-                    if key not in {"correlation_id", "reply_to"}
-                    and isinstance(value, (str, int, float, bool))
-                }
-            publisher.publish(proton_msg)
-        finally:
-            publisher.close()
+        publisher = self._publishers.get(address)
+        if publisher is None:
+            publisher = self._conn.publisher(address)
+            self._publishers[address] = publisher
+        proton_msg = ProtonMessage(body=encode_body(message.body))
+        proton_msg.inferred = True
+        if message.routing_key:
+            proton_msg.subject = message.routing_key
+        correlation_id = (message.attributes or {}).get("correlation_id")
+        if correlation_id is not None:
+            proton_msg.correlation_id = correlation_id
+        reply_to = (message.attributes or {}).get("reply_to")
+        if reply_to:
+            proton_msg.reply_to = reply_to
+        if message.attributes:
+            proton_msg.properties = {
+                key: value
+                for key, value in message.attributes.items()
+                if key not in {"correlation_id", "reply_to"}
+                and isinstance(value, (str, int, float, bool))
+            }
+        return publisher.publish(proton_msg)
 
-    def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
+    def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: Optional[int] = None,
+    ) -> None:
         destination = rabbitmq_queue_address(queue_id)
         wrapped = _CallbackHandler(handler)
-        self._consumer = self._conn.consumer(destination, message_handler=wrapped)
+        consumer_kwargs: dict[str, Any] = {"message_handler": wrapped}
+        if prefetch is not None:
+            consumer_kwargs["credit"] = prefetch
+        self._consumer = self._conn.consumer(destination, **consumer_kwargs)
         self._consumer.run()
 
     def stop(self) -> None:
@@ -193,6 +220,9 @@ class RabbitMqEngine(QueueEngine):
 
     def close(self) -> None:
         self.stop()
+        for publisher in self._publishers.values():
+            publisher.close()
+        self._publishers.clear()
         self._conn.close()
 
     def _publish_address(self, destination: str, routing_key: str) -> str:

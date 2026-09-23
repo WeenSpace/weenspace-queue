@@ -1,7 +1,4 @@
-from typing import Any, Callable, Dict, Type
-
-from .asyncio.aws_async import AwsAsyncEngine
-from .asyncio.rabbitmq_async import RabbitMqAsyncEngine
+from typing import Any, Callable, Type
 from .base import (
     AsyncQueueEngine,
     Message,
@@ -16,26 +13,38 @@ from .constants import (
     Provider,
     QueueKind,
 )
-from .providers.aws import AwsEngine
-from .providers.rabbitmq import RabbitMqEngine
+
+
+def _engine_class(provider: str) -> Type[QueueEngine]:
+    if provider == PROVIDER_AWS:
+        from .providers.aws import AwsEngine
+
+        return AwsEngine
+    if provider == PROVIDER_RABBITMQ:
+        from .providers.rabbitmq import RabbitMqEngine
+
+        return RabbitMqEngine
+    raise ValueError(f"Unsupported provider '{provider}'")
+
+
+def _async_engine_class(provider: str) -> Type[AsyncQueueEngine]:
+    if provider == PROVIDER_AWS:
+        from .asyncio.aws_async import AwsAsyncEngine
+
+        return AwsAsyncEngine
+    if provider == PROVIDER_RABBITMQ:
+        from .asyncio.rabbitmq_async import RabbitMqAsyncEngine
+
+        return RabbitMqAsyncEngine
+    raise ValueError(f"Unsupported provider '{provider}'")
 
 
 class QueueClient:
     """Single client: pass provider name, then use the same publish/consume/topology methods."""
 
-    _ENGINES: Dict[str, Type[QueueEngine]] = {
-        PROVIDER_AWS: AwsEngine,
-        PROVIDER_RABBITMQ: RabbitMqEngine,
-    }
-
     def __init__(self, provider: str, **config: Any) -> None:
         prov_key = provider.lower().strip()
-        engine_cls = self._ENGINES.get(prov_key)
-        if engine_cls is None:
-            supported = ", ".join(sorted(self._ENGINES))
-            raise ValueError(
-                f"Unsupported provider '{provider}'. Supported: {supported}"
-            )
+        engine_cls = _engine_class(prov_key)
         self.provider = prov_key
         self.engine: QueueEngine = engine_cls(**config)
 
@@ -48,11 +57,17 @@ class QueueClient:
     def bind_pattern(self, queue_id: str, topic_id: str, pattern: str) -> None:
         self.engine.bind_pattern(queue_id, topic_id, pattern)
 
-    def publish(self, destination: str, message: Message) -> None:
-        self.engine.publish(destination, message)
+    def publish(self, destination: str, message: Message) -> Any:
+        return self.engine.publish(destination, message)
 
-    def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
-        self.engine.consume(queue_id, handler)
+    def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: int | None = None,
+    ) -> None:
+        return self.engine.consume(queue_id, handler, prefetch=prefetch)
 
     def stop(self) -> None:
         self.engine.stop()
@@ -70,19 +85,9 @@ class QueueClient:
 class AsyncQueueClient:
     """Async twin of QueueClient. Same method names, same provider argument."""
 
-    _ENGINES: Dict[str, Type[AsyncQueueEngine]] = {
-        PROVIDER_AWS: AwsAsyncEngine,
-        PROVIDER_RABBITMQ: RabbitMqAsyncEngine,
-    }
-
     def __init__(self, provider: str, **config: Any) -> None:
         prov_key = provider.lower().strip()
-        engine_cls = self._ENGINES.get(prov_key)
-        if engine_cls is None:
-            supported = ", ".join(sorted(self._ENGINES))
-            raise ValueError(
-                f"Unsupported provider '{provider}'. Supported: {supported}"
-            )
+        engine_cls = _async_engine_class(prov_key)
         self.provider = prov_key
         self.engine: AsyncQueueEngine = engine_cls(**config)
 
@@ -95,11 +100,17 @@ class AsyncQueueClient:
     async def bind_pattern(self, queue_id: str, topic_id: str, pattern: str) -> None:
         await self.engine.bind_pattern(queue_id, topic_id, pattern)
 
-    async def publish(self, destination: str, message: Message) -> None:
-        await self.engine.publish(destination, message)
+    async def publish(self, destination: str, message: Message) -> Any:
+        return await self.engine.publish(destination, message)
 
-    async def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
-        await self.engine.consume(queue_id, handler)
+    async def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: int | None = None,
+    ) -> None:
+        await self.engine.consume(queue_id, handler, prefetch=prefetch)
 
     async def stop(self) -> None:
         await self.engine.stop()

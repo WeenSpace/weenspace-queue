@@ -20,7 +20,7 @@ def handle_event(msg: Message) -> None:
 
 def event_driven_task_queue(provider: str, **config) -> None:
     client = QueueClient(provider=provider, **config)
-    client.declare_queue(
+    queue = client.declare_queue(
         QueueSpecification(
             name="order-worker-queue",
             kind=QueueKind.CLASSIC,
@@ -29,9 +29,9 @@ def event_driven_task_queue(provider: str, **config) -> None:
             max_receive_count=3,
         )
     )
-    destination = config.get("queue_destination", "order-worker-queue")
+    destination = config.get("queue_destination", queue)
     client.publish(destination, Message(body=b"Process Order #991"))
-    # client.consume(destination, handler=handle_event)
+    # client.consume(destination, handler=handle_event, prefetch=10)
     client.close()
 
 
@@ -39,13 +39,31 @@ def streaming_wildcard_pipeline(provider: str, **config) -> None:
     client = QueueClient(provider=provider, **config)
     topic = config["topic"]
     queue = config["queue"]
-    client.declare_topic(TopicSpecification(name=config.get("topic_name", topic)))
-    client.declare_queue(QueueSpecification(name=config.get("queue_name", queue)))
+    topic_id = client.declare_topic(
+        TopicSpecification(name=config.get("topic_name", topic))
+    )
+    queue_id = client.declare_queue(
+        QueueSpecification(name=config.get("queue_name", queue))
+    )
+    client.bind_pattern(queue_id, topic_id, "user.click.*")
+    client.publish(
+        topic_id,
+        Message(body=b'{"x": 14, "y": 82}', routing_key="user.click.cart"),
+    )
+    client.close()
+
+
+def sns_to_sqs_pipeline(**config) -> None:
+    """Publish through SNS and consume the matching event from SQS."""
+    client = QueueClient(provider="aws", **config)
+    topic = client.declare_topic(TopicSpecification(name=config["topic"]))
+    queue = client.declare_queue(QueueSpecification(name=config["queue"]))
     client.bind_pattern(queue, topic, "user.click.*")
     client.publish(
         topic,
         Message(body=b'{"x": 14, "y": 82}', routing_key="user.click.cart"),
     )
+    # client.consume(queue, handler=handle_event, prefetch=10)
     client.close()
 
 
@@ -66,3 +84,9 @@ if __name__ == "__main__":
         queue="analytics-dashboard-stream",
         queue_name="analytics-dashboard-stream",
     )
+    # The same workflow uses the returned TopicArn and QueueUrl for AWS.
+    # sns_to_sqs_pipeline(
+    #     region_name="us-east-1",
+    #     topic="click-events",
+    #     queue="analytics-dashboard",
+    # )

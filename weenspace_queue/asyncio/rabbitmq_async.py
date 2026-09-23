@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from weenspace_queue import (
+from rabbitmq_amqp_python_client import (
     ClassicQueueSpecification,
     ExchangeSpecification,
     ExchangeToQueueBindingSpecification,
@@ -11,10 +11,10 @@ from weenspace_queue import (
     QuorumQueueSpecification,
     StreamSpecification,
 )
-from weenspace_queue.asyncio import AsyncEnvironment
-from weenspace_queue.delivery_context import DeliveryContext
-from weenspace_queue.amqp_consumer_handler import AMQPMessagingHandler
-from weenspace_queue.qpid.proton._events import Event
+from rabbitmq_amqp_python_client.asyncio import AsyncEnvironment
+from rabbitmq_amqp_python_client.delivery_context import DeliveryContext
+from rabbitmq_amqp_python_client.amqp_consumer_handler import AMQPMessagingHandler
+from rabbitmq_amqp_python_client.qpid.proton._events import Event
 
 from weenspace_queue.base import (
     AsyncQueueEngine,
@@ -62,6 +62,9 @@ class _CallbackHandler(AMQPMessagingHandler):
         def requeue(evt: Event = event) -> None:
             context.requeue(evt)
 
+        def modified(evt: Event = event) -> None:
+            context.discard_with_annotations(evt, {})
+
         self._handler(
             Message(
                 body=encode_body(proton_msg.body),
@@ -70,6 +73,7 @@ class _CallbackHandler(AMQPMessagingHandler):
                 accept=accept,
                 reject=reject,
                 requeue=requeue,
+                modified=modified,
             )
         )
 
@@ -88,6 +92,7 @@ class RabbitMqAsyncEngine(AsyncQueueEngine):
         self._conn: Any = None
         self._mgmt: Any = None
         self._consumer: Any = None
+        self._publishers: dict[str, Any] = {}
 
     async def _ensure(self) -> None:
         if self._conn is not None:
@@ -95,6 +100,20 @@ class RabbitMqAsyncEngine(AsyncQueueEngine):
         self._conn = await self._env.connection()
         await self._conn.dial()
         self._mgmt = await self._conn.management()
+        self._fix_quorum_delivery_limit()
+
+    def _fix_quorum_delivery_limit(self) -> None:
+        management = getattr(self._mgmt, "_management", self._mgmt)
+        declare_queue = management._declare_queue
+
+        def declare_queue_with_rabbitmq_key(spec: Any) -> Any:
+            body = declare_queue(spec)
+            arguments = body.get("arguments", {})
+            if "x-deliver-limit" in arguments:
+                arguments["x-delivery-limit"] = arguments.pop("x-deliver-limit")
+            return body
+
+        management._declare_queue = declare_queue_with_rabbitmq_key
 
     async def declare_queue(self, spec: QueueSpecification) -> str:
         await self._ensure()
@@ -141,25 +160,32 @@ class RabbitMqAsyncEngine(AsyncQueueEngine):
             )
         )
 
-    async def publish(self, destination: str, message: Message) -> None:
+    async def publish(self, destination: str, message: Message) -> Any:
         await self._ensure()
         address = self._publish_address(destination, message.routing_key)
-        publisher = await self._conn.publisher(address)
-        try:
-            proton_msg = ProtonMessage(body=encode_body(message.body))
-            proton_msg.inferred = True
-            if message.routing_key:
-                proton_msg.subject = message.routing_key
-            await publisher.publish(proton_msg)
-        finally:
-            await publisher.close()
+        publisher = self._publishers.get(address)
+        if publisher is None:
+            publisher = await self._conn.publisher(address)
+            self._publishers[address] = publisher
+        proton_msg = ProtonMessage(body=encode_body(message.body))
+        proton_msg.inferred = True
+        if message.routing_key:
+            proton_msg.subject = message.routing_key
+        return await publisher.publish(proton_msg)
 
-    async def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
+    async def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: Optional[int] = None,
+    ) -> None:
         await self._ensure()
         destination = rabbitmq_queue_address(queue_id)
-        self._consumer = await self._conn.consumer(
-            destination, message_handler=_CallbackHandler(handler)
-        )
+        consumer_kwargs: dict[str, Any] = {"message_handler": _CallbackHandler(handler)}
+        if prefetch is not None:
+            consumer_kwargs["credit"] = prefetch
+        self._consumer = await self._conn.consumer(destination, **consumer_kwargs)
         await self._consumer.run()
 
     async def stop(self) -> None:
@@ -169,6 +195,9 @@ class RabbitMqAsyncEngine(AsyncQueueEngine):
     async def close(self) -> None:
         await self.stop()
         if self._conn is not None:
+            for publisher in self._publishers.values():
+                await publisher.close()
+            self._publishers.clear()
             await self._conn.close()
         await self._env.close()
 

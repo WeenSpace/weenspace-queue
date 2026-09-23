@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any, Callable
+
 from weenspace_queue.base import (
     AsyncQueueEngine,
     Message,
@@ -25,11 +27,19 @@ class AwsAsyncEngine(AsyncQueueEngine):
     async def bind_pattern(self, queue_id: str, topic_id: str, pattern: str) -> None:
         await asyncio.to_thread(self._sync.bind_pattern, queue_id, topic_id, pattern)
 
-    async def publish(self, destination: str, message: Message) -> None:
-        await asyncio.to_thread(self._sync.publish, destination, message)
+    async def publish(self, destination: str, message: Message) -> Any:
+        return await asyncio.to_thread(self._sync.publish, destination, message)
 
-    async def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
-        await asyncio.to_thread(self._sync.consume, queue_id, handler)
+    async def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: int | None = None,
+    ) -> None:
+        await asyncio.to_thread(
+            self._sync.consume, queue_id, handler, prefetch=prefetch
+        )
 
     async def stop(self) -> None:
         self._sync.stop()

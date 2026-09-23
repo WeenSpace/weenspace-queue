@@ -17,6 +17,7 @@ class Message:
     accept: Optional[Callable[[], None]] = None
     reject: Optional[Callable[[], None]] = None
     requeue: Optional[Callable[[], None]] = None
+    modified: Optional[Callable[[], None]] = None
 
 
 @dataclass
@@ -55,11 +56,17 @@ class QueueEngine(ABC):
         pass
 
     @abstractmethod
-    def publish(self, destination: str, message: Message) -> None:
+    def publish(self, destination: str, message: Message) -> Any:
         pass
 
     @abstractmethod
-    def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
+    def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: Optional[int] = None,
+    ) -> None:
         pass
 
     @abstractmethod
@@ -87,11 +94,17 @@ class AsyncQueueEngine(ABC):
         pass
 
     @abstractmethod
-    async def publish(self, destination: str, message: Message) -> None:
+    async def publish(self, destination: str, message: Message) -> Any:
         pass
 
     @abstractmethod
-    async def consume(self, queue_id: str, handler: Callable[[Message], None]) -> None:
+    async def consume(
+        self,
+        queue_id: str,
+        handler: Callable[[Message], None],
+        *,
+        prefetch: Optional[int] = None,
+    ) -> None:
         pass
 
     @abstractmethod
