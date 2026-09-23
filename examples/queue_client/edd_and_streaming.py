@@ -55,7 +55,7 @@ def streaming_wildcard_pipeline(provider: str, **config) -> None:
 
 def sns_to_sqs_pipeline(**config) -> None:
     """Publish through SNS and consume the matching event from SQS."""
-    client = QueueClient(provider="aws", **config)
+    client = QueueClient(provider="AWS", **config)
     topic = client.declare_topic(TopicSpecification(name=config["topic"]))
     queue = client.declare_queue(QueueSpecification(name=config["queue"]))
     client.bind_pattern(queue, topic, "user.click.*")
@@ -68,16 +68,16 @@ def sns_to_sqs_pipeline(**config) -> None:
 
 
 if __name__ == "__main__":
-    # Swap provider="aws" / provider="rabbitmq". Method names stay identical.
+    # Swap provider="AWS" / provider="RABBITMQ". Method names stay identical.
     event_driven_task_queue(
-        "rabbitmq",
+        "RABBITMQ",
         uri="amqp://guest:guest@localhost:5672/",
         dead_letter_target="dlx.exchange",
         dead_letter_routing_key="dlq-fallback",
         queue_destination="order-worker-queue",
     )
     streaming_wildcard_pipeline(
-        "rabbitmq",
+        "RABBITMQ",
         uri="amqp://guest:guest@localhost:5672/",
         topic="ClickStreamExchange",
         topic_name="ClickStreamExchange",

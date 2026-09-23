@@ -59,7 +59,7 @@ class QueueClient:
     """Single client: pass provider name, then use the same publish/consume/topology methods."""
 
     def __init__(self, provider: str, **config: Any) -> None:
-        prov_key = provider.lower().strip()
+        prov_key = provider.strip().upper()
         engine_cls = _engine_class(prov_key)
         self.provider = prov_key
         self.engine: QueueEngine = engine_cls(**config)
@@ -102,7 +102,7 @@ class AsyncQueueClient:
     """Async twin of QueueClient. Same method names, same provider argument."""
 
     def __init__(self, provider: str, **config: Any) -> None:
-        prov_key = provider.lower().strip()
+        prov_key = provider.strip().upper()
         engine_cls = _async_engine_class(prov_key)
         self.provider = prov_key
         self.engine: AsyncQueueEngine = engine_cls(**config)

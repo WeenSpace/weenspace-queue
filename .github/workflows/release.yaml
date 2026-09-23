@@ -34,7 +34,6 @@ jobs:
     if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # Required for PyPI Trusted Publishing (OIDC)
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -42,8 +41,20 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['tool']['poetry']['version'])")
+          test "$RELEASE_TAG" = "v$VERSION" || {
+            echo "Release tag $RELEASE_TAG does not match package version $VERSION"
+            exit 1
+          }
+
       - name: Build distribution packages
         run: uv build
 
       - name: Publish package to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv publish

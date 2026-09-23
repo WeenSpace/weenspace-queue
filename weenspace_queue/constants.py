@@ -4,8 +4,8 @@ from enum import Enum
 
 
 class Provider(str, Enum):
-    AWS = "aws"
-    RABBITMQ = "rabbitmq"
+    AWS = "AWS"
+    RABBITMQ = "RABBITMQ"
 
 
 class QueueKind(str, Enum):

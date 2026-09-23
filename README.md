@@ -30,7 +30,7 @@ pip install weenspace-queue
 ```python
 from weenspace_queue import Message, QueueClient, QueueSpecification
 
-client = QueueClient("rabbitmq", uri="amqp://guest:guest@localhost:5672/")
+client = QueueClient("RABBITMQ", uri="amqp://guest:guest@localhost:5672/")
 queue = client.declare_queue(QueueSpecification(name="my-queue"))
 client.publish(queue, Message(body=b"Hello WeenSpace!"))
 
@@ -43,6 +43,10 @@ client.consume(queue, handler=on_message, prefetch=10)
 
 Install AWS support with `pip install "weenspace-queue[aws]"`.
 
+### AWS SQS and SNS
+
+See [examples/aws/sqs.py](./examples/aws/sqs.py) for direct SQS publishing and [examples/aws/sns.py](./examples/aws/sns.py) for an SNS-to-SQS workflow with routing-key filters.
+
 ### Async Support
 
 ```python
@@ -50,7 +54,7 @@ import asyncio
 from weenspace_queue import AsyncQueueClient, Message, QueueSpecification
 
 async def main():
-    async with AsyncQueueClient("rabbitmq", uri="amqp://localhost:5672/") as client:
+    async with AsyncQueueClient("RABBITMQ", uri="amqp://localhost:5672/") as client:
         queue = await client.declare_queue(QueueSpecification(name="my-queue"))
         await client.publish(queue, Message(body=b"Async message!"))
 
@@ -63,7 +67,7 @@ asyncio.run(main())
 from weenspace_queue import QueueClient
 
 client = QueueClient(
-    "rabbitmq",
+    "RABBITMQ",
     uri="amqp://localhost:5672/",
     oauth2_options=your_oauth_options
 )
@@ -75,7 +79,7 @@ client = QueueClient(
 from weenspace_queue import QueueClient
 
 client = QueueClient(
-    "rabbitmq",
+    "RABBITMQ",
     uri="amqps://localhost:5671/",
     ssl_context=your_ssl_context
 )
