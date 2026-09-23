@@ -45,7 +45,7 @@ Install AWS support with `pip install "weenspace-queue[aws]"`.
 
 ### AWS SQS and SNS
 
-See [examples/aws/sqs.py](./examples/aws/sqs.py) for direct SQS publishing and [examples/aws/sns.py](./examples/aws/sns.py) for an SNS-to-SQS workflow with routing-key filters.
+See [examples/aws/sqs.py](https://github.com/WeenSpace/weenspace-queue/blob/main/examples/aws/sqs.py) for direct SQS publishing and [examples/aws/sns.py](https://github.com/WeenSpace/weenspace-queue/blob/main/examples/aws/sns.py) for an SNS-to-SQS workflow with routing-key filters.
 
 ### Async Support
 
@@ -87,7 +87,7 @@ client = QueueClient(
 
 ## 📚 Documentation
 
-See [examples](./examples) folder for more detailed usage examples.
+See the [examples folder](https://github.com/WeenSpace/weenspace-queue/tree/main/examples) for more detailed usage examples.
 
 ## 🔄 Migration from python-rabbitmq
 

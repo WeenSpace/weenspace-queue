@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="weenspace-queue",
-    version="0.1.3",
+    version="0.1.4",
     packages=find_packages(),
     install_requires=[
         "python-qpid-proton==0.40.0",
